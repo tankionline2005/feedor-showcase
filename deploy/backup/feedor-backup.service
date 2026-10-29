@@ -1,0 +1,11 @@
+[Unit]
+Description=Feedor backup to Google Drive (docs/backup.md)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/feedor-backup
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=1h

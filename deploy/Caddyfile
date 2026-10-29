@@ -1,0 +1,21 @@
+# HTTPS in front of the web app (docker compose profile "https", see README).
+# Caddy gets and renews the Let's Encrypt certificate by itself; DOMAIN comes from .env, and so does
+# OLD_DOMAINS: the site's former addresses, space-separated (e.g. "old.com www.old.com"), led to DOMAIN.
+
+{$DOMAIN} {
+	encode gzip
+	reverse_proxy web:8000 {
+		# live updates (/api/live) are a server-sent events stream: pass every event at once
+		flush_interval -1
+	}
+}
+
+# www, and the former addresses: over to the domain, the same page (old links and bookmarks keep working)
+www.{$DOMAIN} {$OLD_DOMAINS} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+# the server's bare IP (old bookmarks, the installed app): over to the domain
+:80 {
+	redir https://{$DOMAIN}{uri} permanent
+}

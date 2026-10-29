@@ -1,0 +1,611 @@
+/* «Публикации» → «Календарь» (screens/PublicationsCalendar.tsx) */
+
+.calendar-bar {
+  align-items: center;
+}
+
+.calendar-bar-title {
+  flex: 1;
+  padding-left: 16px;
+  color: var(--text-2);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.calendar {
+  padding: 0 0 24px;
+}
+
+.calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 2px 8px 6px;
+}
+
+.calendar-title {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.calendar-week,
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin: 0 12px;
+}
+
+.calendar-week span {
+  padding: 4px 0;
+  color: var(--text-3);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.calendar-grid {
+  gap: 2px;
+}
+
+.calendar-day {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  height: 52px;
+  padding-top: 6px;
+  border-radius: 12px;
+  color: var(--text);
+  transition: background 0.2s;
+}
+
+.calendar-day.out {
+  color: var(--text-3);
+}
+
+.calendar-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-day.today .calendar-num {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.calendar-day.on .calendar-num {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+@media (hover: hover) {
+  .calendar-day:not(.on):hover {
+    background: var(--fill-2);
+  }
+}
+
+.calendar-dots {
+  display: flex;
+  gap: 3px;
+  height: 6px;
+}
+
+.dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.dot.scheduled {
+  background: var(--accent);
+}
+
+.dot.published {
+  background: var(--text-3);
+}
+
+.dot.failed {
+  background: var(--red);
+}
+
+.calendar-count {
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 8px 16px 0;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.calendar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.calendar-day-title {
+  margin-top: 18px;
+}
+
+.calendar-hours {
+  margin: 0 16px;
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.calendar-hour {
+  display: flex;
+  align-items: stretch;
+  min-height: 30px;
+  border-top: 0.5px solid var(--separator);
+}
+
+.calendar-hour:first-child {
+  border-top: 0;
+}
+
+.calendar-hour-label {
+  flex: none;
+  width: 52px;
+  padding: 7px 0 0 12px;
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-hour.busy .calendar-hour-label {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.calendar-hour-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 8px 4px 0;
+}
+
+.calendar-post {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border-left: 3px solid var(--text-3);
+  background: var(--fill-2);
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+}
+
+.calendar-post.scheduled {
+  border-left-color: var(--accent);
+}
+
+.calendar-post.failed {
+  border-left-color: var(--red);
+}
+
+.calendar-post-time {
+  flex: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.calendar-post-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.calendar-post-state {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.calendar-post.failed .calendar-post-state {
+  color: var(--red);
+}
+
+.calendar-free {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: 8px;
+  color: var(--accent);
+  font-size: 13px;
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+
+.calendar-free:active,
+.calendar-free:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .calendar-free:hover {
+    opacity: 1;
+    background: var(--accent-soft);
+  }
+}
+
+/* «Рубрики» (screens/RubricsSheet.tsx) */
+.rubric-row {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  color: inherit;
+}
+
+.rubric-example {
+  padding: 12px 16px;
+}
+
+.calendar-pick-title {
+  white-space: normal;
+}
+
+/* «Обложки» (screens/CoversSheet.tsx) and a post's cover (ChatPostCard) */
+.cover-preview {
+  display: flex;
+  justify-content: center;
+  margin: 0 16px;
+}
+
+/* a cover the server draws: a pulsing placeholder of its shape until it comes (CoverPicture) */
+.cover-picture {
+  position: relative;
+  overflow: hidden;
+}
+
+.cover-picture:not(.ready) {
+  background: var(--fill-2);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.cover-picture img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.cover-picture.ready img {
+  opacity: 1;
+}
+
+.cover-preview .cover-picture {
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.cover-templates {
+  display: flex;
+  gap: 10px;
+  padding: 2px 16px 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* with a mouse: a thin bar under the templates to drag (the wheel scrolls them too, see useWheelScrollX) */
+@media (hover: hover) and (pointer: fine) {
+  .cover-templates {
+    padding-bottom: 12px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-3) transparent;
+  }
+
+  .cover-templates::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .cover-templates::-webkit-scrollbar-thumb {
+    border-radius: 4px;
+    background: var(--text-3);
+  }
+
+  .cover-templates::-webkit-scrollbar-track {
+    margin: 0 16px;
+    background: transparent;
+  }
+}
+
+.cover-template {
+  position: relative;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  transition: width 0.25s;
+}
+
+.cover-template .cover-picture {
+  width: 100%;
+  border-radius: 12px;
+  border: 2px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.cover-template.on .cover-picture {
+  border-color: var(--accent);
+}
+
+.cover-template.on {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cover-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+}
+
+.cover-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 16px;
+}
+
+.cover-swatch {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  transition: transform 0.2s;
+}
+
+.cover-swatch.on {
+  box-shadow:
+    0 0 0 2px var(--sheet-bg),
+    0 0 0 4px var(--accent);
+  transform: scale(1.05);
+}
+
+.cover-swatch.custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: conic-gradient(#ff3b30, #ff9500, #ffcc00, #34c759, #0a84ff, #5e5ce6, #ff2d55, #ff3b30);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cover-swatch.custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.chat-post-cover {
+  padding: 0 12px 10px;
+}
+
+.chat-post-cover .cover-picture {
+  width: 100%;
+  border-radius: 12px;
+}
+
+.cover-control {
+  margin: 0 12px 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--fill-2);
+}
+
+.cover-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+
+.cover-control-label {
+  flex: 1;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.cover-control-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.cover-control-body .cover-picture {
+  flex: none;
+  width: 56px;
+  border-radius: 8px;
+}
+
+.cover-control-title {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  outline: 0;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+/* a small cover of the project's style as a row's icon (CoverRows) */
+.cell-icon.cover-thumb {
+  overflow: hidden;
+  background: var(--fill);
+}
+
+.cell-icon.cover-thumb .cover-picture {
+  width: 100%;
+}
+
+.cover-control-hint {
+  display: block;
+  margin-top: 1px;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.cover-control-picture {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  line-height: 0;
+}
+
+.cover-control-style {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 8px 0 0 auto;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* «Новое: обложки» over the owner's «Публикации» */
+.covers-tip {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  margin: 0 16px 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--card);
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--text-2);
+  overflow: hidden;
+}
+
+.covers-tip-picture {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--fill);
+}
+
+.covers-tip-picture .cover-picture {
+  width: 100%;
+}
+
+.covers-tip-text {
+  flex: 1;
+  min-width: 0;
+  padding-right: 18px;
+}
+
+.covers-tip-title {
+  margin-bottom: 2px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.covers-tip-action {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.covers-tip-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  padding: 4px;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+/* «Публикации»: «Календарь», «Рубрики», the settings — after the filters, or by the large title on a phone */
+.publications-bar-actions {
+  display: flex;
+  flex: none;
+}
+
+/* a section's buttons right of the large title on a phone (Page's titleActions) */
+.title-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: -8px;
+}
+
+.title-actions:empty {
+  display: none;
+}

@@ -1,0 +1,70 @@
+x-app: &app
+  image: kindergarten-monitoring:latest
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://monitoring:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/monitoring
+    # the worker's internal service (full-size photos), reachable only inside this network
+    WORKER_URL: http://worker:8001
+  volumes:
+    - media:/data/media
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: monitoring
+      POSTGRES_USER: monitoring
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U monitoring -d monitoring"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # web builds the image once; worker runs the same image
+  web:
+    <<: *app
+    build: .
+    ports:
+      - "${WEB_PORT:-80}:8000"
+
+  worker:
+    <<: *app
+    pull_policy: never
+    command: ["python", "-m", "app.worker"]
+    volumes:
+      - media:/data/media
+      # the host's /proc, read-only: its network counters for Settings → System Performance (perf.py)
+      - /proc:/host/proc:ro
+
+  # HTTPS for DOMAIN; on with COMPOSE_PROFILES=https in .env (then WEB_PORT=127.0.0.1:8000)
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    profiles: ["https"]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-}
+      OLD_DOMAINS: ${OLD_DOMAINS:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  pgdata:
+  media:
+  caddy_data:
+  caddy_config:

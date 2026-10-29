@@ -1,0 +1,36 @@
+# Secrets and local data
+.env
+data/
+*.session
+*.session-journal
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Frontend
+node_modules/
+frontend/dist/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local tooling
+.claude/
+
+# Screen recordings and screenshots dropped into the folder for review
+*.mp4
+*.MP4
+*.mov
+*.MOV
+/*.png
+/*.jpg
+/*.jpeg
+
+# TypeScript incremental build cache
+*.tsbuildinfo

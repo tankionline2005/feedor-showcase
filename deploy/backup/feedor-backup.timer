@@ -1,0 +1,9 @@
+[Unit]
+Description=Feedor backup at 03:00 and 15:00 Moscow time
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

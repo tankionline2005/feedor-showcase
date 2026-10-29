@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <script>
+      // iOS zooms the page into a focused field whose font is under 16px and does not zoom back; maximum-scale
+      // stops that (pinch-zoom still works there). Not elsewhere: Android never zooms so, and would lose pinch-zoom.
+      if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+        document.querySelector('meta[name=viewport]').content += ', maximum-scale=1'
+      }
+    </script>
+    <meta name="theme-color" content="#000000" />
+    <script>
+      // the theme chosen in the settings (src/lib/theme.ts), dark unless chosen otherwise: before the page draws
+      try {
+        var theme = localStorage.getItem('theme') === 'light' ? 'light' : 'dark'
+      } catch (e) {
+        theme = 'dark'
+      }
+      document.documentElement.dataset.theme = theme
+      if (theme === 'light') document.querySelector('meta[name=theme-color]').content = '#f2f2f7'
+    </script>
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="__SITE_NAME__" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>__SITE_NAME__</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

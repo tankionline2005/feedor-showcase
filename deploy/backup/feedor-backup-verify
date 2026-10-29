@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# Checks that a backup restores: downloads the latest copy (or the one named), decrypts it with the private key
+# given on stdin (never written to this server's disk), restores the database into a temporary one and compares
+# it with the live database table by table, checks the files against the live ones, then removes all of it.
+#   ssh root@<server> feedor-backup-verify [feedor-….tar.age] < feedor-backup-key.txt
+set -Eeuo pipefail
+export LC_ALL=C  # sort and join agree on the order
+
+CONF=/etc/feedor-backup
+APP=/opt/kindergarten-monitoring
+VOLUMES=/var/lib/docker/volumes
+DB=kindergarten-db-1
+CHECK_DB=feedor_restore_check
+REMOTE=gdrive:feedor-backup
+RCLONE=(rclone --config "$CONF/rclone.conf" --retries 3)
+problems=0
+
+psql_in() { docker exec "$DB" psql -U monitoring -d "$1" -tAX -v ON_ERROR_STOP=1 -c "$2" </dev/null; }
+bad() {
+  echo "  ПРОБЛЕМА: $*"
+  problems=$((problems + 1))
+}
+
+T=$(mktemp -d /var/tmp/feedor-verify.XXXXXX)
+cleanup() {
+  psql_in postgres "drop database if exists $CHECK_DB with (force)" >/dev/null 2>&1 || true
+  rm -rf "$T"
+}
+trap cleanup EXIT
+
+name=${1:-$("${RCLONE[@]}" lsf --files-only --include 'feedor-*.tar.age' "$REMOTE" | sort | tail -1)}
+[[ -n $name ]] || { echo "no copies in $REMOTE" >&2; exit 1; }
+echo "Копия: $name"
+"${RCLONE[@]}" copyto "$REMOTE/$name" "$T/$name"
+echo "  скачана: $(($(stat -c %s "$T/$name") / 1024)) KB"
+
+# the key comes from stdin; a key file saved on Windows may have CRLF line ends
+tr -d '\r' | age -d -i - -o "$T/backup.tar" "$T/$name"
+rm "$T/$name"
+mkdir "$T/x"
+tar -C "$T/x" -xf "$T/backup.tar"
+rm "$T/backup.tar"
+cd "$T/x"
+echo "  расшифрована и распакована; $(grep '^made:' INFO)"
+if sha256sum -c --quiet SHA256SUMS; then
+  echo "  контрольные суммы всех $(wc -l <SHA256SUMS) файлов сходятся"
+else
+  bad "контрольные суммы не сходятся"
+fi
+
+echo
+echo "База: разворачиваю во временную $CHECK_DB"
+psql_in postgres "drop database if exists $CHECK_DB with (force)" >/dev/null 2>&1
+psql_in postgres "create database $CHECK_DB" >/dev/null
+docker exec -i "$DB" pg_restore -U monitoring -d "$CHECK_DB" --no-owner --exit-on-error <db.dump
+counts='select string_agg(format($$select %L, count(*) from public.%I$$, tablename, tablename), $$ union all $$
+  order by tablename) from pg_tables where schemaname = $$public$$'
+psql_in "$CHECK_DB" "$(psql_in "$CHECK_DB" "$counts")" | sort >"$T/restored"
+psql_in monitoring "$(psql_in monitoring "$counts")" | sort >"$T/live"
+printf '  %-22s %10s %10s\n' "таблица" "в копии" "сейчас"
+join -t'|' -a1 -a2 -e '-' -o 0,1.2,2.2 "$T/restored" "$T/live" | while IFS='|' read -r table copy live; do
+  note=""
+  if [[ $copy == - ]]; then note="  ← нет в копии"
+  elif [[ $live == - ]]; then note="  ← нет в рабочей базе"
+  elif ((live != copy)); then note="  (изменилась после копии: $((live - copy > 0 ? live - copy : copy - live)))"
+  fi
+  printf '  %-22s %10s %10s%s\n' "$table" "$copy" "$live" "$note"
+done
+missing=$(join -t'|' -v1 -v2 "$T/restored" "$T/live" | wc -l)
+((missing == 0)) || bad "$missing таблиц есть только с одной стороны"
+total_copy=$(awk -F'|' '{s += $2} END {print s}' "$T/restored")
+total_live=$(awk -F'|' '{s += $2} END {print s}' "$T/live")
+echo "  всего строк: в копии $total_copy, сейчас $total_live; таблиц: $(wc -l <"$T/restored")"
+((total_copy > 0)) || bad "в копии нет ни одной строки"
+
+echo
+echo "Файлы: сверяю с рабочими"
+if cmp -s env "$APP/.env"; then echo "  .env совпадает"; else bad ".env отличается от рабочего"; fi
+if diff -rq --exclude=.env src "$APP/src" >/dev/null; then
+  echo "  код (src, вместе с docker-compose.yml и Caddyfile) совпадает: $(find src -type f | wc -l) файлов"
+else
+  echo "  код отличается от выложенного (выкладка после копии?):"
+  { diff -rq --exclude=.env src "$APP/src" || true; } | head -5 | sed 's/^/    /'
+fi
+if diff -rq caddy_data "$VOLUMES/kindergarten_caddy_data/_data" >/dev/null; then
+  echo "  сертификаты Caddy совпадают, всего: $(find caddy_data -name '*.crt' | wc -l)"
+else
+  echo "  сертификаты Caddy изменились после копии (продление?)"
+fi
+same=0
+while IFS= read -r -d '' f; do
+  live=/${f#server/}
+  if cmp -s "$f" "$live"; then same=$((same + 1)); else echo "  отличается: $live"; fi
+done < <(find server -type f -print0)
+echo "  настройки сервера: совпадают $same из $(find server -type f | wc -l)"
+
+echo
+if ((problems == 0)); then
+  echo "ИТОГ: копия $name восстанавливается, проблем нет. Временная база и файлы удалены."
+else
+  echo "ИТОГ: проблем: $problems. Временная база и файлы удалены."
+  exit 1
+fi

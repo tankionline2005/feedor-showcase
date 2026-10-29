@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+# Backup of the server: the database, the secrets, the deployed code and the server's configs — one tar,
+# encrypted with age to the public key in recipient.txt, uploaded to Google Drive (gdrive:feedor-backup).
+# Run by feedor-backup.timer at 00:00 and 12:00 UTC; see docs/backup.md.
+#   DRY_RUN=1  the failure alert only says what it would send (and checks the bot's token by getMe)
+#   FAIL_AT=<step>  breaks that step on purpose, to test the alert
+set -Eeuo pipefail
+
+CONF=/etc/feedor-backup
+APP=/opt/kindergarten-monitoring
+VOLUMES=/var/lib/docker/volumes
+DB=kindergarten-db-1
+REMOTE=gdrive:feedor-backup
+KEEP=14
+MIN_DUMP=$((1024 * 1024))
+# server configs worth having when the server is set up again (rclone.conf and notify.env are not: secrets
+# that are made anew)
+SERVER_FILES=(
+  /etc/ufw/after.rules /etc/ufw/after6.rules /etc/ufw/user.rules /etc/ufw/user6.rules
+  /etc/fail2ban/jail.local /etc/docker/daemon.json /etc/fstab /root/.ssh/authorized_keys
+  /etc/feedor-backup/recipient.txt
+  /etc/systemd/system/feedor-backup.service /etc/systemd/system/feedor-backup.timer
+  /usr/local/sbin/feedor-backup /usr/local/sbin/feedor-backup-verify
+)
+RCLONE=(rclone --config "$CONF/rclone.conf" --retries 3 --low-level-retries 10)
+started=$(date +%s)
+step=start
+
+sql() { docker exec "$DB" psql -U monitoring -d monitoring -tAX -c "$1" </dev/null; }
+
+# the project's notification bot, to the chats that get its alerts; the token and the chats are kept in
+# notify.env too, for when the database itself is what failed
+notify() {
+  local text=$1 token chats
+  token=$(sql "select value #>> '{}' from settings where key = 'notify_bot_token'" 2>/dev/null || true)
+  chats=$(sql "select chat_id from notify_chats" 2>/dev/null | tr '\n' ' ' || true)
+  if [[ -z $token || -z ${chats// /} ]] && [[ -f $CONF/notify.env ]]; then
+    # shellcheck source=/dev/null
+    . "$CONF/notify.env"
+    token=$NOTIFY_TOKEN chats=$NOTIFY_CHATS
+  fi
+  if [[ -z $token || -z ${chats// /} ]]; then
+    echo "no bot or no chats to tell" >&2
+    return 1
+  fi
+  local chat
+  for chat in $chats; do
+    if [[ -n ${DRY_RUN:-} ]]; then
+      echo "DRY_RUN: would send to $chat: $text" >&2
+      continue
+    fi
+    # the token goes to curl through stdin, not in its command line
+    curl -fsS -m 20 -o /dev/null --data-urlencode "chat_id=$chat" --data-urlencode "text=$text" \
+      -K - <<<"url = \"https://api.telegram.org/bot$token/sendMessage\"" || echo "telling $chat failed" >&2
+  done
+  if [[ -n ${DRY_RUN:-} ]]; then
+    curl -fsS -m 20 -K - <<<"url = \"https://api.telegram.org/bot$token/getMe\"" | grep -q '"ok":true' &&
+      echo "DRY_RUN: the bot's token works (getMe)" >&2
+  fi
+}
+
+remember_bot() {
+  local token chats
+  token=$(sql "select value #>> '{}' from settings where key = 'notify_bot_token'")
+  chats=$(sql "select chat_id from notify_chats" | tr '\n' ' ')
+  [[ -n $token && -n ${chats// /} ]] || return 0
+  (umask 077 && printf 'NOTIFY_TOKEN=%q\nNOTIFY_CHATS=%q\n' "$token" "$chats" >"$CONF/notify.env")
+}
+
+on_error() {
+  local code=$? line=$1
+  trap - ERR
+  echo "feedor-backup: FAILED at step «$step» (line $line, exit code $code)" >&2
+  notify "Резервная копия $(hostname) не удалась: шаг «$step», код $code. Журнал: journalctl -u feedor-backup -n 50" ||
+    true
+  exit "$code"
+}
+trap 'on_error $LINENO' ERR
+
+begin() {
+  step=$1
+  echo "== $step"
+  if [[ ${FAIL_AT:-} == "$1" ]]; then
+    echo "breaking «$1» on purpose (FAIL_AT)" >&2
+    false
+  fi
+}
+
+begin lock
+exec 9>/run/feedor-backup.lock
+flock -n 9
+
+T=$(mktemp -d /var/tmp/feedor-backup.XXXXXX)
+trap 'rm -rf "$T"' EXIT
+mkdir -p "$T/stage"
+cd "$T/stage"
+
+begin dump
+docker exec "$DB" pg_dump -U monitoring -d monitoring -Fc </dev/null >db.dump
+
+begin check-dump
+size=$(stat -c %s db.dump)
+((size >= MIN_DUMP)) || { echo "the dump is only $size bytes" >&2; false; }
+docker exec -i "$DB" pg_restore -l <db.dump >"$T/dump.list"
+for table in users projects channels posts accounts settings balance_ops; do
+  grep -q " TABLE DATA public $table " "$T/dump.list" || { echo "no table $table in the dump" >&2; false; }
+done
+tables=$(grep -c ' TABLE DATA public ' "$T/dump.list")
+echo "db.dump: $((size / 1024)) KB, $tables tables"
+
+begin collect
+cp -a "$APP/.env" env
+cp -a "$APP/src" src
+rm -f src/.env
+cp -a "$VOLUMES/kindergarten_caddy_data/_data" caddy_data
+mkdir server
+cp -a --parents "${SERVER_FILES[@]}" server/
+{
+  echo "host: $(hostname)"
+  echo "made: $(date -u +%FT%TZ)"
+  echo "tables: $tables"
+} >INFO
+find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS
+
+begin encrypt
+name="feedor-$(date -u +%Y%m%d-%H%M%SZ).tar.age"
+tar -C "$T/stage" -cf - . | age -R "$CONF/recipient.txt" -o "$T/$name"
+local_size=$(stat -c %s "$T/$name")
+
+begin upload
+"${RCLONE[@]}" copyto "$T/$name" "$REMOTE/$name"
+
+begin check-upload
+remote_size=$("${RCLONE[@]}" lsf --format s "$REMOTE/$name")
+[[ $remote_size == "$local_size" ]] || { echo "in the cloud $remote_size bytes, here $local_size" >&2; false; }
+
+# only now, with the new copy safely there: the oldest beyond KEEP go, for good (not to the trash)
+begin prune
+mapfile -t copies < <("${RCLONE[@]}" lsf --files-only --include 'feedor-*.tar.age' "$REMOTE" | sort)
+extra=$((${#copies[@]} - KEEP))
+for ((i = 0; i < extra; i++)); do
+  echo "deleting ${copies[i]}"
+  "${RCLONE[@]}" deletefile --drive-use-trash=false "$REMOTE/${copies[i]}"
+done
+kept=$((${#copies[@]} - (extra > 0 ? extra : 0)))
+
+begin finish
+remember_bot
+echo "feedor-backup: OK $name, $((local_size / 1024)) KB, $kept copies kept, $(($(date +%s) - started)) s"
